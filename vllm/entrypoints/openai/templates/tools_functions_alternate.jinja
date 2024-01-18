@@ -1,0 +1,72 @@
+{%- set func_call_token = "!function_call:" -%} {#- The special prefix to functions calls, be aware of extra space or new lines ! -#}
+
+{%- if CONTEXT == CALL_TOKEN -%} {#- return only the func_call_token value. Needed by the implementation. -#}
+    {{- func_call_token -}}
+{%- endif -%} {#- CONTEXT == CALL_TOKEN #}
+{%- if CONTEXT == CALLS_RESPONSES -%} {#- Formatting of the response of the function call. -#}
+    {%- for call in tool_calls -%}
+    {%- if call.function.arguments == None or call.function.arguments|count == 0 -%}
+    {{- call.id -}} was called with arguments : null
+    {%- else -%}
+    {{- call.id -}} was called with arguments : {{ call.function.arguments -}}
+    {%- endif -%}
+    {%- raw %}
+{% endraw -%}
+    {%- endfor -%}
+{%- endif -%} {#- CONTEXT == CALLS_RESPONSES #}
+{%- if CONTEXT == FUNCTIONS_LIST -%} {#- Functions list generation -#}
+As and assistant you can respond directly or invoke a function using a specific syntax.
+To call a function, the message must start by "{{func_call_token}}" followed by a json like this:
+* With arguments:
+{{func_call_token}}{"call": "function_name", "arguments": {"arg1": "value1"}}
+* Without arguments:
+{{func_call_token}}{"call": "function_name", "arguments": null}
+{%- if tool_choice == None -%} {#- "auto" mode #}
+{% raw %}
+* If you need to call at least one function, your message should contain only a list of function calls and nothing else; the function calls are the response.
+* The decision to invoke a function is yours, only invoke functions when it makes sense to do so.
+* The decision to invoke a function is yours, only invoke a function if it is necessary to answer the user's question.
+
+Now the list of available functions, you should only change the arguments as needed:
+[
+{% endraw -%}
+{%- for tool in tools_list -%}
+{%- raw %}
+{% endraw -%}
+* Task : "{{tool.function.description}}"
+{%- raw %}]
+{% endraw -%}
+{%- if tool.function.parameters == None or tool.function.parameters|count == 0 -%}  {#- without parameter -#}
+* Call: {{func_call_token}}{'call': "{{tool.function.name}}", 'arguments': null}
+
+{%- else -%} {#- with parameters -#}
+* Call: {{func_call_token}}{'call': "{{tool.function.name}}", 'arguments': {{tools_list[0].function.parameters}} }
+
+{%- endif -%}  {#- tool.function.parameters -#}
+
+{%- raw %}
+{% endraw -%}
+{%- endfor -%}
+{%- raw %}
+]{% endraw -%}
+{%- else -%} {#- force specific function -#}
+{% raw %}
+
+You must call this function at least one time to answer the question, you should only change the arguments as needed. You may call it multiple times if needed:
+{% endraw -%}
+* Task : "{{tools_list[0].function.description}}"
+{%- raw %}]
+{% endraw -%}
+{%- if tools_list[0].function.parameters == None or tools_list[0].function.parameters|count == 0 -%}  {#- without parameter -#}
+* Call: {{func_call_token}}{'call': "{{tools_list[0].function.name}}", 'arguments': null}
+
+{%- else -%} {#- with parameters -#}
+* Call: {{func_call_token}}{'call': "{{tools_list[0].function.name}}", 'arguments': {{tools_list[0].function.parameters}} }
+
+{%- endif -%}  {#- tools_list[0].function.parameters -#}
+{%- endif -%} {#- !tool_choice -#}
+{%- raw %}
+
+End of functions instructions.
+{%- endraw -%}
+{%- endif -%} {#- CONTEXT == FUNCTIONS_LIST #}
