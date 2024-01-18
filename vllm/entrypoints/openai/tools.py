@@ -2,59 +2,79 @@ import os
 import json
 import jinja2
 from enum import Enum
-from typing import List, Optional, Union, Any
+from typing import List, Union
 from vllm.logger import init_logger
-from .protocol import (
-    ChatCompletionRequest, ChatCompletionToolParam,
-    ChoiceDeltaToolCall, ChatCompletionMessageToolCall, Function,
-    ChatCompletionAssistantMessage, ChatCompletionToolMessage)
+from .protocol import (ChatCompletionRequest, ChatCompletionToolParam,
+                       ChoiceDeltaToolCall, ChatCompletionMessageToolCall,
+                       Function, ChatCompletionAssistantMessage,
+                       ChatCompletionToolMessage)
 
 logger = init_logger(__name__)
 
+
 class ToolsCallsTemplateContext(Enum):
     """ This is used within the template to generate depending on the context. """
-    FUNCTIONS_LIST = 1
-    CALL_TOKEN = 2
-    CALLS_RESPONSES = 3
+    CALL_TOKEN = 1
+    FUNCTIONS_LIST = 2
+    FORCE_CALL = 3
+    CALLS_NOTIF = 4
+    TOOL_RESPONSE = 5
+
 
 class ToolsCallsTemplate:
+
     def __init__(self, template_path=None):
         self.trim_blocks = True
         self.lstrip_blocks = True
         if template_path is None:
-            template_path = os.path.dirname(__file__) + "/templates/tools_functions.jinja"
-        self.environment = jinja2.Environment(loader=jinja2.FileSystemLoader(os.path.dirname(template_path)))
-        self.template = self.environment.get_template(os.path.basename(template_path))
-        self.template.globals['FUNCTIONS_LIST'] = ToolsCallsTemplateContext.FUNCTIONS_LIST
-        self.template.globals['CALL_TOKEN'] = ToolsCallsTemplateContext.CALL_TOKEN
-        self.template.globals['CALLS_RESPONSES'] = ToolsCallsTemplateContext.CALLS_RESPONSES
+            template_path = os.path.dirname(
+                __file__) + "/templates/tools_functions.jinja"
+        self.environment = jinja2.Environment(
+            loader=jinja2.FileSystemLoader(os.path.dirname(template_path)))
+        self.template = self.environment.get_template(
+            os.path.basename(template_path))
+        self.template.globals[
+            "FUNCTIONS_LIST"] = ToolsCallsTemplateContext.FUNCTIONS_LIST
+        self.template.globals[
+            "FORCE_CALL"] = ToolsCallsTemplateContext.FORCE_CALL
+        self.template.globals[
+            "CALL_TOKEN"] = ToolsCallsTemplateContext.CALL_TOKEN
+        self.template.globals[
+            "CALLS_NOTIF"] = ToolsCallsTemplateContext.CALLS_NOTIF
+        self.template.globals[
+            "TOOL_RESPONSE"] = ToolsCallsTemplateContext.TOOL_RESPONSE
 
     def get_func_call_token(self) -> str:
         """ Return the special token used to find functions calls. """
-        return self.template.render(CONTEXT=ToolsCallsTemplateContext.CALL_TOKEN)
+        return self.template.render(
+            CONTEXT=ToolsCallsTemplateContext.CALL_TOKEN)
 
-    def renderToolResponses(self, tool_calls: [ChatCompletionMessageToolCall]):
-        return self.template.render(CONTEXT=ToolsCallsTemplateContext.CALLS_RESPONSES,
-                                    tool_calls=tool_calls)
+    def renderToolCalls(self, tool_calls: [ChatCompletionMessageToolCall]):
+        return self.template.render(
+            CONTEXT=ToolsCallsTemplateContext.CALLS_NOTIF,
+            tool_calls=tool_calls)
 
-    def renderToolsList(self, tool_choice: Union[str, None], tools_list: [ChatCompletionToolParam]) -> str:
+    def renderToolMessage(self, message: ChatCompletionToolMessage):
+        return self.template.render(
+            CONTEXT=ToolsCallsTemplateContext.TOOL_RESPONSE, message=message)
+
+    def renderToolsList(self, tool_choice: Union[str, None],
+                        tools_list: [ChatCompletionToolParam]) -> str:
         if isinstance(tool_choice, str) and tool_choice == "auto":
             tool_choice = None
         if tool_choice is not None:
             for tool in tools_list:
                 # Search if the tool_choice is in the tools_list
-                if tool.type == "function":
-                    if tool.function.name == tool_choice:
-                        return self.template.render(
-                            CONTEXT=ToolsCallsTemplateContext.FUNCTIONS_LIST,
-                            tool_choice=tool_choice,
-                            tools_list=[tool])
+                if tool.type == "function" and tool.function.name == tool_choice:
+                    return self.template.render(
+                        CONTEXT=ToolsCallsTemplateContext.FORCE_CALL,
+                        tool=tool)
             return None
         else:
             return self.template.render(
                 CONTEXT=ToolsCallsTemplateContext.FUNCTIONS_LIST,
-                tool_choice=tool_choice,
                 tools_list=tools_list)
+
 
 class OpenAIToolsPrompter:
     """
@@ -80,27 +100,31 @@ class OpenAIToolsPrompter:
 
     def content_from_assistant(self,
                                message: ChatCompletionAssistantMessage) -> str:
-        text = self.template.renderToolResponses(message.tool_calls)
+        text = self.template.renderToolCalls(message.tool_calls)
         if message.content is None:
             return text
         else:
             return message.content + "\n" + text
 
     def content_from_tool(self, message: ChatCompletionToolMessage) -> str:
-        return message.content
+        return self.template.renderToolMessage(message)
 
     def inject_prompt(self, request: ChatCompletionRequest):
         """ Generate and inject the prompt for tools calls. """
-        if request.tools is not None:
-            if self.call_token_str is not None and len(request.tools):
-                select_tool_choice = request.tool_choice if (request.tool_choice is not None and request.tool_choice is not "auto") else None
-                text_inject = self.template.renderToolsList(tool_choice=select_tool_choice, tools_list=request.tools)
-                if isinstance(request.messages, str):
-                    request.messages = text_inject + request.messages
-                elif isinstance(request.messages,
-                                List) and len(request.messages) >= 1:
-                    request.messages[
-                        0].content = text_inject + request.messages[0].content
+        if request.tools is not None and self.call_token_str is not None and len(
+                request.tools):
+            select_tool_choice = request.tool_choice if (
+                request.tool_choice is not None
+                and request.tool_choice != "auto") else None
+            text_inject = self.template.renderToolsList(
+                tool_choice=select_tool_choice, tools_list=request.tools)
+            if isinstance(request.messages, str):
+                request.messages = text_inject + request.messages
+            elif isinstance(request.messages,
+                            List) and len(request.messages) >= 1:
+                request.messages[
+                    0].content = text_inject + request.messages[0].content
+
 
 class ChatPromptCapture:
 
@@ -110,6 +134,7 @@ class ChatPromptCapture:
         self.is_function_call = False
         self.prefix_size = 0
         self.calls_list: List[{}] = []
+        self.after_new_function_call = False
 
     def reset(self, reset_calls_list=False):
         self.content = ""
@@ -154,8 +179,7 @@ class ChatPromptCapture:
         tools_calls_list = []
         for call_id in range(calls_count):
             tools_calls_list.append(
-                self.to_ChatCompletionMessageToolCall(
-                    call_id=call_id))
+                self.to_ChatCompletionMessageToolCall(call_id=call_id))
         return tools_calls_list
 
     def to_ChoiceDeltaToolCall(
@@ -172,5 +196,6 @@ class ChatPromptCapture:
         calls_count = self.num_calls()
         tools_calls_list = []
         for call_id in range(calls_count):
-            tools_calls_list.append(self.to_ChoiceDeltaToolCall(call_id=call_id))
+            tools_calls_list.append(
+                self.to_ChoiceDeltaToolCall(call_id=call_id))
         return tools_calls_list

@@ -207,6 +207,14 @@ class OpenAIServingChat(OpenAIServing):
                 current_capture = tools_capture_texts[
                     i] if tools_capture_texts is not None else None
 
+                if current_capture is not None and current_capture.after_new_function_call:
+                    current_capture.after_new_function_call = False
+                    # If the last token is a new line char right after a function call, we ignore it.
+                    # Otherwise, each function call creates a line break in the content part of the response.
+                    if output.text[len(previous_texts[i]):] == "\n":
+                        previous_texts[i] = output.text
+                        continue
+
                 # Manage tools calling
                 if self.openai_tools_prompter is not None and \
                         request.tools is not None and \
@@ -249,6 +257,7 @@ class OpenAIServingChat(OpenAIServing):
                                     current_capture.make_calls_list(
                                         self.openai_tools_prompter)
                                     current_capture.reset(False)
+                                    current_capture.after_new_function_call = True
                             else:
                                 pass
                 if current_capture is None or (
@@ -258,20 +267,21 @@ class OpenAIServingChat(OpenAIServing):
                     previous_num_tokens[i] = len(output.token_ids)
 
                     if output.finish_reason is None:
-                        # Send token-by-token response for each request.n
-                        choice_data = ChatCompletionResponseStreamChoice(
-                            index=i,
-                            delta=DeltaMessage(content=delta_text),
-                            finish_reason=None)
-                        chunk = ChatCompletionStreamResponse(
-                            id=request_id,
-                            object=chunk_object_type,
-                            created=created_time,
-                            choices=[choice_data],
-                            model=model_name)
-                        data = chunk.json(exclude_unset=True,
-                                          ensure_ascii=False)
-                        yield f"data: {data}\n\n"
+                        if len(delta_text) > 0:
+                            # Send token-by-token response for each request.n
+                            choice_data = ChatCompletionResponseStreamChoice(
+                                index=i,
+                                delta=DeltaMessage(content=delta_text),
+                                finish_reason=None)
+                            chunk = ChatCompletionStreamResponse(
+                                id=request_id,
+                                object=chunk_object_type,
+                                created=created_time,
+                                choices=[choice_data],
+                                model=model_name)
+                            data = chunk.json(exclude_unset=True,
+                                              ensure_ascii=False)
+                            yield f"data: {data}\n\n"
                     else:
                         if output.finish_reason == "stop" and (
                                 current_capture is not None and
