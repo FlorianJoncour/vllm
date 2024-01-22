@@ -49,17 +49,17 @@ class ToolsCallsTemplate:
         return self.template.render(
             CONTEXT=ToolsCallsTemplateContext.CALL_TOKEN)
 
-    def renderToolCalls(self, tool_calls: [ChatCompletionMessageToolCall]):
+    def render_toolcalls(self, tool_calls: [ChatCompletionMessageToolCall]):
         return self.template.render(
             CONTEXT=ToolsCallsTemplateContext.CALLS_NOTIF,
             tool_calls=tool_calls)
 
-    def renderToolMessage(self, message: ChatCompletionToolMessage):
+    def render_toolmessage(self, message: ChatCompletionToolMessage):
         return self.template.render(
             CONTEXT=ToolsCallsTemplateContext.TOOL_RESPONSE, message=message)
 
-    def renderToolsList(self, tool_choice: Union[str, None],
-                        tools_list: [ChatCompletionToolParam]) -> str:
+    def render_toolslist(self, tool_choice: Union[str, None],
+                         tools_list: [ChatCompletionToolParam]) -> str:
         if isinstance(tool_choice, str) and tool_choice == "auto":
             tool_choice = None
         if tool_choice is not None:
