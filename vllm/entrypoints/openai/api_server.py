@@ -159,10 +159,10 @@ async def health() -> Response:
 
 if "--dev-mode" in sys.argv:
 
-    @app.get("/resetAPI")
-    async def resetAPI() -> Response:
+    @app.get("/privileged")
+    async def privileged() -> Response:
         """Reload the API internals. Danger !"""
-        logger.warning("resetAPI called.")
+        logger.warning("privileged called.")
         _loadServingServices()
         return Response(status_code=200)
 
