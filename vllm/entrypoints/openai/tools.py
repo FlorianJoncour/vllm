@@ -100,14 +100,14 @@ class OpenAIToolsPrompter:
 
     def content_from_assistant(self,
                                message: ChatCompletionAssistantMessage) -> str:
-        text = self.template.renderToolCalls(message.tool_calls)
+        text = self.template.render_toolcalls(message.tool_calls)
         if message.content is None:
             return text
         else:
             return message.content + "\n" + text
 
     def content_from_tool(self, message: ChatCompletionToolMessage) -> str:
-        return self.template.renderToolMessage(message)
+        return self.template.render_toolmessage(message)
 
     def inject_prompt(self, request: ChatCompletionRequest):
         """ Generate and inject the prompt for tools calls. """
@@ -116,7 +116,7 @@ class OpenAIToolsPrompter:
             select_tool_choice = request.tool_choice if (
                 request.tool_choice is not None
                 and request.tool_choice != "auto") else None
-            text_inject = self.template.renderToolsList(
+            text_inject = self.template.render_toolslist(
                 tool_choice=select_tool_choice, tools_list=request.tools)
             if isinstance(request.messages, str):
                 request.messages = text_inject + request.messages
