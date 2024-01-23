@@ -21,40 +21,63 @@
 {%- endif -%} {#- CONTEXT == TOOL_RESPONSE -#}
 
 {%- if CONTEXT == FORCE_CALL -%} {#- One tool call defined request. Data: tool = ChatCompletionToolParam -#}
-You must call the following function at least one time to answer the question. You may call it multiple times if needed:
+    {%- if PREFIX -%}
+        {{PREFIX|replace('{{func_call_token}}', func_call_token)}}{#- Using prefix from request.tool_template.force_call.prefix -#}
+    {%- else -%}
+        {%- raw -%}
+            You must call the following function at least one time to answer the question. You may call it multiple times if needed:
+        {%- endraw -%}
+    {%- endif -%}{#- default prefix -#}
         {%- if tool.function.parameters == None or tool.function.parameters|count == 0 -%}  {#- without parameter #}
   {'name': "{{tool.function.name}}", 'description': "{{tool.function.description}}", 'arguments': null},
         {%- else -%} {#- with parameters #}
   {'name': "{{tool.function.name}}", 'description': "{{tool.function.description}}", 'arguments': { {{tool.function.parameters}} {{ '}}' }},
         {%- endif %}  {#- tool.function.parameters #}
+    {%- if SUFFIX -%}
+        {{'\n' +  SUFFIX|replace('{{func_call_token}}', func_call_token) }}{#- Using suffix from request.tool_template.force_call.suffix -#}
+    {%- else %}
+To call a function, the message must start by "{{func_call_token}}" followed by a json like this:
+* With arguments:
+{{func_call_token}}{"call": "function_name", "arguments": {"arg1": "value1"}}
+* Without arguments:
+{{func_call_token}}{"call": "function_name", "arguments": null}
+End of functions instructions. 
+    {%- endif -%}
 {%- endif -%} {#- CONTEXT == FORCE_CALL -#}
 
 {%- if CONTEXT == FUNCTIONS_LIST -%} {#- Functions list generation Data: tools_list = List[ChatCompletionToolParam] -#}
-    {%- raw -%}The following is a list of external functions that may be called to complete certain tasks:
+    {%- if PREFIX -%}
+        {{PREFIX|replace('{{func_call_token}}', func_call_token) }}{#- Using prefix from request.tool_template.function_list.prefix -#}
+    {%- else -%}
+    {%- raw -%}
+The following is a list of external functions that may be called to complete certain tasks:
 [
-    {%- endraw -%}
+        {%- endraw -%}
+    {%- endif -%}{#- default prefix -#}
     {%- for tool in tools_list -%}
-    {%- if tool.function.parameters == None or tool.function.parameters|count == 0 -%}  {#- without parameter #}
-  {'name': "{{tool.function.name}}", 'description': "{{tool.function.description}}", 'arguments': null},
-    {%- else -%} {#- with parameters #}
-  {'name': "{{tool.function.name}}", 'description': "{{tool.function.description}}", 'arguments': { {{tool.function.parameters}} {{ '}}' }},
-  {% endif -%}  {#- tool.function.parameters #}
+        {%- if tool.function.parameters == None or tool.function.parameters|count == 0 -%}  {#- without parameter #}
+    {'name': "{{tool.function.name}}", 'description': "{{tool.function.description}}", 'arguments': null},
+        {%- else -%} {#- with parameters #}
+    {'name': "{{tool.function.name}}", 'description': "{{tool.function.description}}", 'arguments': { {{tool.function.parameters}} {{ '}}' }},
+        {%- endif -%}  {#- tool.function.parameters #}
     {%- endfor -%}
-    {%- raw %}
+    {%- if SUFFIX -%}
+        {{'\n' + SUFFIX|replace('{{func_call_token}}', func_call_token) }}{#- Using suffix from request.tool_template.function_list.suffix -#}
+    {%- else -%}
+        {%- raw %}
 ]
 End of list
 
 * Whenever the user asks you something, you can either respond directly or invoke a function if it is present in the previous list.
 * The decision to invoke a function is yours, only invoke a function if it is necessary to answer the user's question
 * If you need to call at least one function, your message should contain only a list of function calls and nothing else; the function calls are the response.
-    {%- endraw %}
-{%- endif -%} {#- CONTEXT == FUNCTIONS_LIST -#}
 
-{%- if CONTEXT == FORCE_CALL or CONTEXT == FUNCTIONS_LIST -%}
+{% endraw -%}
 To call a function, the message must start by "{{func_call_token}}" followed by a json like this:
 * With arguments:
 {{func_call_token}}{"call": "function_name", "arguments": {"arg1": "value1"}}
 * Without arguments:
 {{func_call_token}}{"call": "function_name", "arguments": null}
 End of functions instructions
-{%- endif -%} {#- CONTEXT == FORCE_CALL or CONTEXT == FUNCTIONS_LIST -#}
+    {%- endif -%} {#- default suffix -#}
+{%- endif -%} {#- CONTEXT == FUNCTIONS_LIST -#}
