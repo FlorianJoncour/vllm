@@ -131,7 +131,6 @@ class OpenAIToolsPrompter:
         """ Generate and inject the prompt for tools calls. """
         if request.tools is not None and self.call_token_str is not None and len(
                 request.tools):
-            logger.info(f"Full request:\n\n--------------------\n\n {request}.")
             select_tool_choice = request.tool_choice if (
                 request.tool_choice is not None
                 and request.tool_choice != "auto") else None
