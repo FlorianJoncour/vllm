@@ -54,6 +54,15 @@ class Function(BaseModel):
     name: str
     arguments: str
 
+class ToolTemplates(BaseModel):
+    prefix: Optional[str] = None
+    suffix: Optional[str] = None
+
+class ChatToolTemplate(BaseModel):
+    function_list: Optional[ToolTemplates] = Field(default_factory=ToolTemplates)
+    force_call: Optional[ToolTemplates] = Field(default_factory=ToolTemplates)
+    position: Optional[Literal["top", "bottom"]] = Field(default="top")
+
 
 class ChatCompletionMessageToolCall(BaseModel):
     id: str
@@ -128,6 +137,7 @@ class ChatCompletionRequest(BaseModel):
     min_p: Optional[float] = 0.0
     tools: Optional[List[ChatCompletionToolParam]] = None
     tool_choice: Optional[str] = None
+    tool_templates: Optional[ChatToolTemplate] = Field(default_factory=ChatToolTemplate)
 
 
 class CompletionRequest(BaseModel):

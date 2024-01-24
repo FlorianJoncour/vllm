@@ -7,7 +7,8 @@ from vllm.logger import init_logger
 from .protocol import (ChatCompletionRequest, ChatCompletionToolParam,
                        ChoiceDeltaToolCall, ChatCompletionMessageToolCall,
                        Function, ChatCompletionAssistantMessage,
-                       ChatCompletionToolMessage)
+                       ChatCompletionToolMessage,
+                       ChatToolTemplate)
 
 logger = init_logger(__name__)
 
@@ -59,21 +60,38 @@ class ToolsCallsTemplate:
             CONTEXT=ToolsCallsTemplateContext.TOOL_RESPONSE, message=message)
 
     def render_toolslist(self, tool_choice: Union[str, None],
-                         tools_list: [ChatCompletionToolParam]) -> str:
+                         tools_list: [ChatCompletionToolParam],
+                         tool_templates: ChatToolTemplate) -> str:
         if isinstance(tool_choice, str) and tool_choice == "auto":
             tool_choice = None
         if tool_choice is not None:
             for tool in tools_list:
                 # Search if the tool_choice is in the tools_list
                 if tool.type == "function" and tool.function.name == tool_choice:
+                    if tool_templates.force_call is not None:
+                        prefix = tool_templates.force_call.prefix if tool_templates.force_call.prefix else None
+                        suffix = tool_templates.force_call.suffix if tool_templates.force_call.suffix else None
+                    else:
+                        prefix = None
+                        suffix = None
                     return self.template.render(
                         CONTEXT=ToolsCallsTemplateContext.FORCE_CALL,
-                        tool=tool)
+                        tool=tool,
+                        PREFIX=prefix,
+                        SUFFIX=suffix)
             return None
         else:
+            if tool_templates.function_list is not None:
+                prefix = tool_templates.function_list.prefix if tool_templates.function_list.prefix else None
+                suffix = tool_templates.function_list.suffix if tool_templates.function_list.suffix else None
+            else:
+                prefix = None
+                suffix = None
             return self.template.render(
                 CONTEXT=ToolsCallsTemplateContext.FUNCTIONS_LIST,
-                tools_list=tools_list)
+                tools_list=tools_list,
+                PREFIX=prefix,
+                SUFFIX=suffix)
 
 
 class OpenAIToolsPrompter:
@@ -117,14 +135,22 @@ class OpenAIToolsPrompter:
                 request.tool_choice is not None
                 and request.tool_choice != "auto") else None
             text_inject = self.template.render_toolslist(
-                tool_choice=select_tool_choice, tools_list=request.tools)
+                tool_choice=select_tool_choice, tools_list=request.tools,
+                tool_templates=request.tool_templates)
+            template_position = request.tool_templates.position
             if isinstance(request.messages, str):
-                request.messages = text_inject + request.messages
+                if template_position == "top":
+                    request.messages = text_inject + request.messages
+                else:
+                    request.messages = request.messages + text_inject
             elif isinstance(request.messages,
                             List) and len(request.messages) >= 1:
-                request.messages[
-                    0].content = text_inject + request.messages[0].content
-
+                if template_position == "top":
+                    request.messages[
+                        0].content = text_inject + request.messages[0].content
+                else:
+                    request.messages[
+                        0].content = request.messages[0].content + text_inject
 
 class ChatPromptCapture:
 
